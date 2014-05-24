@@ -773,6 +773,7 @@ def toImage(encrypted):
     img.show()
 
 def main():
+    # Hello World
     # Basic Example of Elliptic Curve:
     # Elliptic Curve = EC(a, b, q, o) st
     # y^2 = x^3 + ax + b mod q and Point P^o=P
