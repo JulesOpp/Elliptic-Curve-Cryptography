@@ -147,6 +147,8 @@ import copy
 # start = time()
 # print time()-start
 
+from JJO_Compression import Huffman, compress, expand
+
 ########################################################################
 
 def extendedEuclid(a, b):
@@ -302,8 +304,8 @@ class EC(object):
         self.q = q
         # just as unique ZERO value representation for "add": (not on curve)
         self.zero = Coord(0, 0)
-        self.JaZero = JaCoord(0,1,0)
-        self.ProZero = ProCoord(1,1,0)
+        self.JaZero = JaCoord(0,0,0)
+        self.ProZero = ProCoord(0,0,0)
 
         self.o = o
         pass
@@ -346,7 +348,7 @@ class EC(object):
         y = (l * (p1.x - x) - p1.y) % self.q
         return Coord(x, y)
      
-    def mul(self, p, n):
+    def Affmul(self, p, n):
         """n times <mul> of elliptic curve
         >>> m = ec.mul(p, n)
         """
@@ -359,20 +361,23 @@ class EC(object):
                 pass
             n, m2 = n >> 1, self.Affadd(m2, m2)
             pass
+        #print r
         return r
  
     def ProDouble(self, p):
         if p.y == 0: return self.ProZero
-        w = self.a*p.z^2+3*p.x^2
+        w = self.a*p.z**2+3*p.x**2
         s = p.y*p.z
-        ss = s^2
+        ss = s**2
         sss = s*ss
         R = p.y*s
         B = p.x*R
-        h = w^2-8*B
+        h = w**2-8*B
         X = 2*h*s
-        Y = w*(4*B-h)-8*R^2
+        Y = w*(4*B-h)-8*R**2
         Z = 8*sss
+        # p=(1,2,1), w=-2, s=2, R=4, B=4, h=-28, x=36
+        #print "w",w,"s",s,"ss",ss,"R",R,"B",B,"h",h,"(x,y,z)",X%self.q,Y,Z
         """XX = p.x^2
         ZZ = p.z^2
         w = self.a*ZZ+3*XX
@@ -398,32 +403,35 @@ class EC(object):
             X1Z2 = p1.x*p2.z
             Z1Z2 = p1.z*p2.z
             u = p2.y*p1.z-Y1Z2
-            uu = u^2
+            uu = u**2
             v = p2.x*p1.z-X1Z2
-            vv = v^2
+            vv = v**2
             vvv = v*vv
             R = vv*X1Z2
-            A = uu*Z1Z2-vvv*Y1Z2
+            A = uu*Z1Z2-vvv-2*R
             X = v*A
             Y = u*(R-A)-vvv*Y1Z2
             Z = vvv*Z1Z2
         return ProCoord(X%self.q, Y%self.q, Z%self.q)
 
-    def ProMul(self, p, n):
+    def mul(self, p, n):
         # Map (x,y) to (X,Y,Z) where x=X/Z and y=Y/Z
         # Use Projective Coordinates, call the ProAdd and ProDouble
         # Methods to multiply
         r = self.ProZero
         m2 = ProCoord(p.x, p.y, 1)
         # O(log2(n)) add, fast and efficient
+        #print m2,"times",n
         while 0 < n:
             if n & 1 == 1:
                 r = self.ProAdd(r, m2)
+                #print "if",r,m2
                 pass
             n, m2 = n >> 1, self.ProDouble(m2)
+            #print n,m2
             pass
         #return r
-
+        #print r
         h = inv(r.z, self.q)
         x = r.x*h%self.q
         y = r.y*h%self.q
@@ -432,16 +440,25 @@ class EC(object):
     def JaDouble(self, p):
         if p.y == 0:
             return self.JaZero
-        XX = p.x^2
-        YY = p.y^2
-        YYYY = YY^2
-        ZZ = p.z^2
-        S = 2*((p.x+YY)^2-XX-YYYY)
-        M = 3*XX+self.a*ZZ^2
-        T = M^2-2*S
+        XX = p.x**2
+        YY = p.y**2
+        YYYY = YY**2
+        S = 2*((p.x+YY)**2-XX-YYYY)
+        M = 3*XX+self.a
+        T = M**2-2*S
         X = T
         Y = M*(S-T)-8*YYYY
-        Z = (p.y+p.z)^2-YY-ZZ
+        Z = 2*p.y
+        #XX = p.x^2
+        #YY = p.y^2
+        #YYYY = YY^2
+        #ZZ = p.z^2
+        #S = 2*((p.x+YY)^2-XX-YYYY)
+        #M = 3*XX+self.a*ZZ^2
+        #T = M^2-2*S
+        #X = T
+        #Y = M*(S-T)-8*YYYY
+        #Z = (p.y+p.z)^2-YY-ZZ
         return JaCoord(X % self.q,Y % self.q,Z % self.q)
 
     def JaAdd(self, p1, p2):
@@ -450,28 +467,28 @@ class EC(object):
         if p1.x == p2.x and (p1.y != p2.y or p1.y == 0): return self.JaZero
         if p1.x == p2.x: return self.JaDouble(p1)
         if p1.z == p2.z:
-            A = (p2.x-p1.x)^2
+            A = (p2.x-p1.x)**2
             B = p1.x*A
             C = p2.x*A
-            D = (p2.y-p1.y)^2
+            D = (p2.y-p1.y)**2
             X = D-B-C
             Y = (p2.y-p1.y)*(B-X)-p1.y*(C-B)
             Z = p1.z*(p2.x-p1.x)
         else:
-            Z1Z1 = p1.z^2
-            Z2Z2 = p2.z^2
+            Z1Z1 = p1.z**2
+            Z2Z2 = p2.z**2
             U1 = p1.x*Z2Z2
             U2 = p2.x*Z1Z1
             S1 = p1.y*p2.z*Z2Z2
             S2 = p2.y*p1.z*Z1Z1
             H = U2 - U1
-            I = (2*H)^2
+            I = (2*H)**2
             J = H*I
             r = 2*(S2-S1)
             V = U1*I
-            X = r^2-J-2*V
+            X = r**2-J-2*V
             Y = r*(V-X)-2*S1*J
-            Z = ((p1.z+p2.z)^2-Z1Z1-Z2Z2)*H      
+            Z = ((p1.z+p2.z)**2-Z1Z1-Z2Z2)*H      
         return JaCoord(X%self.q, Y%self.q, Z%self.q)
 
     def Jamul(self, p, n):
@@ -496,6 +513,7 @@ class EC(object):
         x = r.x*hh%self.q
         hh = hh*h%self.q
         y = r.y*hh%self.q
+        #print Coord(x, y)
         return Coord(x, y)
 
     def order(self, g):
@@ -547,8 +565,9 @@ class ElGamal(object):
         #print "g",g,"y",y
         c = self.ec.mul(g, y)
         #print "c",c
+        o = self.ec.mul(h, y).x
         for i in range(len(m)):
-            d.append((self.ec.mul(h, y).x * m[i]))
+            d.append((o*m[i]))#self.ec.mul(h, y).x * m[i]))
         return (c, d)
 
     def dec(self, cipher, priv):
@@ -559,8 +578,9 @@ class ElGamal(object):
         """
         c, d = cipher
         m = []
+        o = self.ec.mul(c, priv).x
         for i in range(len(d)):
-            m.append((d[i] / self.ec.mul(c, priv).x))
+            m.append((d[i] / o))#self.ec.mul(c, priv).x))
         return m
     pass
 
@@ -644,17 +664,18 @@ def blocks2numList(blocks, n):
     for numBlock in toProcess:
         inner = []
         for i in range(0, n):
-            inner.append(numBlock % 256 - 39)
+            inner.append((numBlock-39) % 256)
             numBlock >>= 8
         inner.reverse()
         returnList.extend(inner)
     return returnList
 
-def encrypt(message, blockSize):
+def encrypt(message):#, blockSize):
     # Convert a String Message into an Array of Integers
+    blockSize = int(len(message)/6) #Split into n+1 blocks
     numList = string2numList(message)
     numBlocks = numList2blocks(numList, blockSize)
-    return numBlocks
+    return numBlocks, blockSize
 
 def decrypt(secret, blockSize,G,g):
     # Convert an Array of Integers into a String Message
@@ -705,7 +726,7 @@ class Person(object):
             self.sig = sig
         #self.sig = 0
 
-        self.blockLen = 100        #Change Blocks here, important to run-time
+        #self.blockLen = 100        #Change Blocks here, important to run-time
 
     def toJacobian(self):
         self.G = JacobianEC(self.G.a, self.G.b, self.G.q, self.G.o)
@@ -723,17 +744,19 @@ class Person(object):
         # Encode the Message in 15 Letter Blocks
         # Return Cipher (c, d)
         #assert self.dsa.validate(128, self.sig, self.h), "Invalid Public Key"
-        m1 = encrypt(m, self.blockLen)
+        m1, blockSize = encrypt(m)#, self.blockLen)
+        #self.blockLen = blockSize
         #print "m1:",m1
+        #print blockSize
         (c, d) = self.gamal.enc(m1, self.g, self.x, self.h)
-        return (c, d)
+        return (c, d, blockSize)
 
-    def decryptMsg(self, (c, d)):
+    def decryptMsg(self, (c, d), blockLen):
         # Given the Cipher (c, d) and the Original Private Key
         # Decode the Message
         m1 = self.gamal.dec((c, d), self.x)
         #print "m1:",m1
-        m1 = decrypt(m1, self.blockLen, self.G, self.g)
+        m1 = decrypt(m1, blockLen, self.G, self.g)
         return m1
 
 def toImage(encrypted):
@@ -791,15 +814,17 @@ def main():
     G = EC(int(p224[1],16), int(p224[2],16), int(p224[3],16), int(p224[6],16))
     init = (int(p224[4],16),int(p224[5],16)) 
 
-    #print "Aff",G.Affmul(Coord(2,81),2)
-    #print "Jac",G.Jamul(Coord(2,81),2)
-    #print "Pro",G.ProMul(Coord(2,81),2)
+    #G = EC(-5, 8, 37, 45)
+    #init = Coord(1, 2)
+
+    #print "Aff",G.mul(init, 3)
+    #print "Jac",G.Jamul(init, 3)
+    #print "Pro",G.Promul(init, 3)
 
     ####################################################################
 
     #Alice Produces her Public Key
     alice = Person(init, G)    
-    #alice.toJacobian()
     (G, o, g, h, sig) = alice.publicKey()
 
     print "Over Curve:", G
@@ -810,7 +835,6 @@ def main():
 
     #Bob encrypts his message and release his Public Key
     bob = Person(g, G, h, sig)
-    #bob.toJacobian()
 
     # Acess a text file to read and write to
     f = open('JJO ECC Text.txt','r')
@@ -819,18 +843,27 @@ def main():
     #message = '''We were the Leopards, the Lions, those who'll take our place 
     #will be little jackals, hyenas; But we'll go on thinking ourselves the salt of the earth.'''
 
-    encrypted = bob.encryptMsg(message)
+    #message = "abcabcabc"
 
-    print "Length:",len(message),", Message:",message
-    print "C, D:",encrypted
+    #Huff = Huffman()
+    #message = compress(Huff, message)
+
+    encrypted1, encrypted2, blockLen = bob.encryptMsg(message)
+    encrypted = (encrypted1, encrypted2)
+
+    #print "Length:",len(message),", Message:",message
+    print "B, C, D:",blockLen, encrypted
     #toImage(encrypted)
 
     ####################################################################
 
     #Alice decrypts Bob's message
-    decrypted = alice.decryptMsg(encrypted)
+    decrypted = alice.decryptMsg(encrypted, blockLen)
+
+    #decrypted = expand(Huff, decrypted)
 
     print "Length:",len(decrypted),", Message:",decrypted
+    #print "Length:",len(decrypted)
 
 ########################################################################
     
