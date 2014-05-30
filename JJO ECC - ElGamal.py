@@ -1,6 +1,7 @@
 ########################################################################
 # Basics of Elliptic Curve Cryptography implementation on Python
 # Using an ElGamal Encryption with a DSA Signature
+# Over Affine, Projective, and Jacobian Coordinates
 # Author: Jules Oppenheim
 #
 # Reference: https://gist.github.com/bellbind/1414867
@@ -19,6 +20,7 @@
 # Imaginary Hyperelliptic Curves? Why not
 
 # Program Information:
+# Projective > Jacobian > Affine Coordinates
 # Affine Coordinates: Run-time = 0.4+0.1*(Number of Blocks)^0.99
 # Block |  Run-time
 # 1     |  0.5
@@ -672,7 +674,7 @@ def blocks2numList(blocks, n):
 
 def encrypt(message):#, blockSize):
     # Convert a String Message into an Array of Integers
-    blockSize = int(len(message)/6) #Split into n+1 blocks
+    blockSize = int(len(message)/200) #Split into n+1 blocks
     numList = string2numList(message)
     numBlocks = numList2blocks(numList, blockSize)
     return numBlocks, blockSize
@@ -814,13 +816,6 @@ def main():
     G = EC(int(p224[1],16), int(p224[2],16), int(p224[3],16), int(p224[6],16))
     init = (int(p224[4],16),int(p224[5],16)) 
 
-    #G = EC(-5, 8, 37, 45)
-    #init = Coord(1, 2)
-
-    #print "Aff",G.mul(init, 3)
-    #print "Jac",G.Jamul(init, 3)
-    #print "Pro",G.Promul(init, 3)
-
     ####################################################################
 
     #Alice Produces her Public Key
@@ -841,7 +836,8 @@ def main():
     message = f.read()
     f.close()
     #message = '''We were the Leopards, the Lions, those who'll take our place 
-    #will be little jackals, hyenas; But we'll go on thinking ourselves the salt of the earth.'''
+    #will be little jackals, hyenas; But we'll go on thinking ourselves the 
+    #salt of the earth.'''
 
     #message = "abcabcabc"
 
@@ -862,8 +858,8 @@ def main():
 
     #decrypted = expand(Huff, decrypted)
 
-    print "Length:",len(decrypted),", Message:",decrypted
-    #print "Length:",len(decrypted)
+    #print "Length:",len(decrypted),", Message:",decrypted
+    print "Length:",len(decrypted)
 
 ########################################################################
     
