@@ -12,15 +12,18 @@
 
 # TO DO:
 # -----------------------------
-# Non-Affine Coordinates do not add properly
+# Change Message Compression from Huffman to something useful
 # Fix the hash value on the DSA
-# Understand the DSA
+# Fix the DSA and activate the assertion in the encryptMsg method
 # Point Compression
 # Try Hessian, types at http://www.hyperelliptic.org/tanja/vortraege/vorTurku.ps
 # Imaginary Hyperelliptic Curves? Why not
 
 # Program Information:
 # Projective > Jacobian > Affine Coordinates
+#
+# Projective Coordinates: 200 blocks = 0.2-0.3 seconds
+#
 # Affine Coordinates: Run-time = 0.4+0.1*(Number of Blocks)^0.99
 # Block |  Run-time
 # 1     |  0.5
@@ -57,7 +60,7 @@
 
 ########################################################################
 
-# Jacobian Coordinates Addition
+# Example Jacobian Coordinates Addition
 # Given Y^2 = X^2 + aXZ^4 + bZ^6, p1(x1,y1,z1) and p2(x2,y2,z2)
 #
 # If (x1,y1,z1) = (0,0,1), return (x2,y2,z2)
@@ -149,7 +152,8 @@ import copy
 # start = time()
 # print time()-start
 
-from JJO_Compression import Huffman, compress, expand
+# Message Compression
+#from JJO_Compression import Huffman, compress, expand
 
 ########################################################################
 
@@ -165,6 +169,7 @@ def extendedEuclid(a, b):
     return a, prevx   #, prevy
 
 def inv(n, q):
+    # Modular Inverse
     g, x = extendedEuclid(n, q)
     if g != 1:
        raise ZeroDivisionError, (n, q)
@@ -209,10 +214,12 @@ def modular_sqrt(a, p):
         r = m
 
 # All points on the Elliptic Curve are set to 'Coord'
+# Coord = Affine Coordinates, JaCoord = Jacobian, ProCoord = Projective
 Coord = collections.namedtuple("Coord", ["x", "y"])
 JaCoord = collections.namedtuple("JaCoord", ["x", "y", "z"])
 ProCoord = collections.namedtuple("ProCoord", ["x", "y", "z"])
 
+# Recommended curves to use
 raw_curve_parameters = collections.namedtuple('raw_curve_parameters',
             ('name', 'a', 'b', 'm', 'base_x', 'base_y', 'order', 'cofactor'))
 RAW_CURVES = {
@@ -336,9 +343,8 @@ class EC(object):
         """
         if p1 == self.zero: return p2
         if p2 == self.zero: return p1
-        if p1.x == p2.x and (p1.y != p2.y or p1.y == 0):
-            # p1 + -p1 == 0
-            return self.zero
+        # p1 + -p1 == 0
+        if p1.x == p2.x and (p1.y != p2.y or p1.y == 0): return self.zero
         if p1.x == p2.x:
             # p1 + p1: use tangent line of p1 as (p1,p1) line
             l = (3 * p1.x * p1.x + self.a) * inv(2 * p1.y, self.q) % self.q
@@ -363,7 +369,6 @@ class EC(object):
                 pass
             n, m2 = n >> 1, self.Affadd(m2, m2)
             pass
-        #print r
         return r
  
     def ProDouble(self, p):
@@ -378,21 +383,6 @@ class EC(object):
         X = 2*h*s
         Y = w*(4*B-h)-8*R**2
         Z = 8*sss
-        # p=(1,2,1), w=-2, s=2, R=4, B=4, h=-28, x=36
-        #print "w",w,"s",s,"ss",ss,"R",R,"B",B,"h",h,"(x,y,z)",X%self.q,Y,Z
-        """XX = p.x^2
-        ZZ = p.z^2
-        w = self.a*ZZ+3*XX
-        s = 2*p.y*p.z
-        ss = s^2
-        sss = s*ss
-        R = p.y*s
-        RR = R^2
-        B = (p.x+R)^2-XX-RR
-        h = w^2-2*B
-        X = h*s
-        Y = w*(B-h)-2*RR
-        Z = sss"""
         return ProCoord(X % self.q,Y % self.q,Z % self.q)
 
     def ProAdd(self, p1, p2):
@@ -423,17 +413,12 @@ class EC(object):
         r = self.ProZero
         m2 = ProCoord(p.x, p.y, 1)
         # O(log2(n)) add, fast and efficient
-        #print m2,"times",n
         while 0 < n:
             if n & 1 == 1:
                 r = self.ProAdd(r, m2)
-                #print "if",r,m2
                 pass
             n, m2 = n >> 1, self.ProDouble(m2)
-            #print n,m2
             pass
-        #return r
-        #print r
         h = inv(r.z, self.q)
         x = r.x*h%self.q
         y = r.y*h%self.q
@@ -451,16 +436,6 @@ class EC(object):
         X = T
         Y = M*(S-T)-8*YYYY
         Z = 2*p.y
-        #XX = p.x^2
-        #YY = p.y^2
-        #YYYY = YY^2
-        #ZZ = p.z^2
-        #S = 2*((p.x+YY)^2-XX-YYYY)
-        #M = 3*XX+self.a*ZZ^2
-        #T = M^2-2*S
-        #X = T
-        #Y = M*(S-T)-8*YYYY
-        #Z = (p.y+p.z)^2-YY-ZZ
         return JaCoord(X % self.q,Y % self.q,Z % self.q)
 
     def JaAdd(self, p1, p2):
@@ -515,7 +490,6 @@ class EC(object):
         x = r.x*hh%self.q
         hh = hh*h%self.q
         y = r.y*hh%self.q
-        #print Coord(x, y)
         return Coord(x, y)
 
     def order(self, g):
@@ -551,8 +525,6 @@ class ElGamal(object):
         - priv: priv key as (random) int < ec.q
         - returns: pub key as points on ec
         """
-        #print "g",self.g
-        #print "priv",priv
         return self.ec.mul(self.g, priv)
  
     def enc(self, m, g, y, h):
@@ -564,9 +536,7 @@ class ElGamal(object):
         """
         assert self.ec.is_valid(g)
         d = []
-        #print "g",g,"y",y
         c = self.ec.mul(g, y)
-        #print "c",c
         o = self.ec.mul(h, y).x
         for i in range(len(m)):
             d.append((o*m[i]))#self.ec.mul(h, y).x * m[i]))
@@ -715,7 +685,6 @@ class Person(object):
         # Initialize the secondary point
         if h == None:
             self.h = self.gamal.gen(self.x)
-            #print "h",self.h
         else:
             self.h = h
 
@@ -726,7 +695,7 @@ class Person(object):
             self.sig = self.dsa.sign(128, self.x, r)
         else:
             self.sig = sig
-        #self.sig = 0
+        #self.sig = 0  # Use for testing
 
         #self.blockLen = 100        #Change Blocks here, important to run-time
 
@@ -745,11 +714,11 @@ class Person(object):
         # Assert DSA
         # Encode the Message in 15 Letter Blocks
         # Return Cipher (c, d)
+
+        # Uncomment to turn on the DSA
         #assert self.dsa.validate(128, self.sig, self.h), "Invalid Public Key"
         m1, blockSize = encrypt(m)#, self.blockLen)
         #self.blockLen = blockSize
-        #print "m1:",m1
-        #print blockSize
         (c, d) = self.gamal.enc(m1, self.g, self.x, self.h)
         return (c, d, blockSize)
 
@@ -757,11 +726,13 @@ class Person(object):
         # Given the Cipher (c, d) and the Original Private Key
         # Decode the Message
         m1 = self.gamal.dec((c, d), self.x)
-        #print "m1:",m1
         m1 = decrypt(m1, blockLen, self.G, self.g)
         return m1
 
 def toImage(encrypted):
+    # This method is still highly inefficient
+    # and needs to be severly reworked
+
     # Using the import statements for Imaging
     # Create a small representation of the message
     # In RGBA.
@@ -830,6 +801,9 @@ def main():
 
     #Bob encrypts his message and release his Public Key
     bob = Person(g, G, h, sig)
+
+    # Different messages, form textfile, 150 char quote, test quote
+    # Must be atleast 200 characters (preset of blocksize)
 
     # Acess a text file to read and write to
     f = open('JJO ECC Text.txt','r')
