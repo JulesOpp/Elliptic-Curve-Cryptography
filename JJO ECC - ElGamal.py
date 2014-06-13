@@ -12,13 +12,18 @@
 
 # TO DO:
 # -----------------------------
+# DSA is slow because it is implementing affine addition, change to projective
+# Finish Twisted Hessian Coordinates
 # Change Message Compression from Huffman to something useful
 # Fix the hash value on the DSA
 # Fix the DSA and activate the assertion in the encryptMsg method
-# Point Compression
-# Try Hessian, types at http://www.hyperelliptic.org/tanja/vortraege/vorTurku.ps
+# Point Compression maybe - Involves only sending the X coordinate and a bit instead of X and Y Coordinate
 # Imaginary Hyperelliptic Curves? Why not
 
+# Different coordinate systems are used to speed up the encryption
+# The run-time determining step is in the point addition on the elliptic curve
+# The different coordinate systems use fewer costly steps, decreaseing run-time
+#
 # Program Information:
 # Projective > Jacobian > Affine Coordinates
 #
@@ -105,6 +110,12 @@ Program Heirarchy:
             modular_sqrt():
                 legendre_symbol()
             Multiplication for different Coordinates
+        HesEC():
+            inv():
+                extendedEuclid()
+            modular_sqrt():
+                legendre_symbol()
+            Multiplication for different Coordinates
     Coord tuple
 """
 
@@ -142,13 +153,13 @@ import random
 from random import randint
 import copy
 
-# Imaging
+# Imaging - See toImage method for details
 #import numpy as np
 #import scipy.misc as smp
 #import skimage #not needed
 
 # Timing
-#from time import time
+from time import time
 # start = time()
 # print time()-start
 
@@ -160,11 +171,11 @@ import copy
 def extendedEuclid(a, b):
     '''return a tuple of three values: x, y and z, such that x is
     the GCD of a and b, and x = y * a + z * b'''
-    prevx, x = 1, 0 ; prevy, y = 0, 1
+    prevx, x = 1, 0 #; prevy, y = 0, 1
     while b:
         q = a/b
         x, prevx = prevx - q*x, x
-        y, prevy = prevy - q*y, y
+        #y, prevy = prevy - q*y, y
         a, b = b, a%b
     return a, prevx   #, prevy
 
@@ -320,9 +331,11 @@ class EC(object):
         pass
 
     def __str__(self):
+        # Print the curve form in short weistrass form over affine coordinates
         return 'y^2 = x^3 + %sx + %s mod %s' % (self.a, self.b, self.q)
 
     def is_valid(self, p):
+        # Validate a point over the curve
         if p == self.zero: return True
         l = (p.y ** 2) % self.q
         r = ((p.x ** 3) + self.a * p.x + self.b) % self.q
@@ -419,6 +432,8 @@ class EC(object):
                 pass
             n, m2 = n >> 1, self.ProDouble(m2)
             pass
+        if r.z == 0:
+            return Coord(0, 0)
         h = inv(r.z, self.q)
         x = r.x*h%self.q
         y = r.y*h%self.q
@@ -509,6 +524,183 @@ class EC(object):
         raise Exception("Invalid order")
     pass
  
+class HesEC(object):
+    """System of Elliptic Curve"""
+    def __init__(self, a, d, q, o=None):
+        """elliptic curve as: (a*x**3 + y**3 + 1= d*x*y) mod q
+        - a, d: params of curve formula
+        - q: prime number
+        - if a == 1: the curve is a Hessian Curve
+        - otherwise: the curve is a Twisted Hessian Curve
+        """
+        #assert 0 < a and a < q and 0 < b and b < q and q > 2
+        #assert (4 * (a ** 3) + 27 * (b ** 2))  % q != 0
+        assert a != 0
+        assert d^3 != 27*a
+        self.a = a
+        self.d = d
+        self.q = q
+        # just as unique ZERO value representation for "add": (not on curve)
+        self.zero = Coord(0, -1)
+
+        self.o = o
+        pass
+
+    def __str__(self):
+        #return 'y^2 = x^3 + %sx + %s mod %s' % (self.a, self.b, self.q)
+        return '%s*x^3 + y^3 + 1 = %sxy' % (self.a, self.d)
+
+    def is_valid(self, p):
+        if p == self.zero: return True
+        l = (p.y ** 3 + p.x ** 3 + self.a) % self.q
+        r = (self.d * p.x * p.y) % self.q
+        return l == r
+ 
+    def at(self, x):
+        """find points on curve at x
+        - x: int < q
+        - returns: ((x, y), (x,-y)) or not found exception 
+        """
+        assert x < self.q
+        ysq = (x ** 3 + self.a * x + self.b) % self.q
+        y = modular_sqrt(ysq, self.q)
+        return Coord(x, y), Coord(x, -y)
+ 
+    # Twisted
+    # a*x^3 + y^3 + 1 = d*x*y
+    # Generalized
+    # x^3 + y^3 + 1 = 3*d*x*y, is there a 3?
+
+    # Twisted can be mapped to generalized
+    # Twisted: u^3 + v^3 + c = d*u*v
+    # (u,v) to (u',v') where u'=u/i and v'=v/i and i=c^(1/3)
+    # Generalized: u'^3 + v'^3 + 1 = d*u'*v'/i
+
+    # Projective of generalized: U^3 + V^3 + W^3 = d*U*V*W
+    # Zero point = (-1, 0, 1)
+    # Addition (U1, V1, W1) and (U2, V2, W2) is
+    # U3 = U2*W2*V1^2 - U1*W1*V2^2
+    # V3 = V2*W2*U1^2 - V1*W1*U2^2
+    # W3 = U2*V2*W1^2 - U1*V1*W2^2
+    #
+    # Doubling of (U1, V1, W1) is
+    # U3 = V1*(W1^3 - U1^3)
+    # V3 = U1*(V1^3 - W1^3)
+    # W3 = W1*(U1^3 - V1^3)
+    #
+    # Note the addition formula is not unified, the formula does not 
+    # work to double a point. Thus, it can be side-channel attacked
+    #
+    # Unified Addition of (U1, V1, W1) and (U2, V2, W2) is
+    # U3 = V2*W2*W1^2 - U1*V1*U2^2
+    # V3 = U2*V2*V1^2 - U1*W1*W2^2
+    # W3 = U2*W2*U1^2 - V1*W1*V2^2
+    #
+    # Better Unified Addition
+    # U3 = V1*W1*W2^2 - U2*V2*U1^2
+    # V3 = U1*V1*V2^2 - U2*W2*W1^2
+    # W3 = U1*W1*U2^2 - V2*W2*V1^2
+
+    # Twisted arithmatic in progress
+    def Twidouble(self, p):
+        A = p.x**3
+        B = p.y**3
+        C = A-B
+        x = p.y*(1-A)/C
+        y = p.x*(B-1)/C
+        return Coord(x, y)
+
+    def Twiadd(self, p1, p2):
+        """<add> of elliptic curve: negate of 3rd cross point of (p1,p2) line
+        """
+        if p1 == self.zero: return p2
+        if p2 == self.zero: return p1
+        # p1 + -p1 == 0
+        if p1.x == p2.x and (p1.y != p2.y or p1.y == 0): return self.zero
+        if p1.x == p2.x: return self.Twidouble(p1)
+        #if p1.x == p2.x:
+            # p1 + p1: use tangent line of p1 as (p1,p1) line
+        #    l = (3 * p1.x * p1.x + self.a) * inv(2 * p1.y, self.q) % self.q
+        #    pass
+        #else:
+        #    l = (p2.y - p1.y) * inv(p2.x - p1.x, self.q) % self.q
+        #    pass
+        #x = (l * l - p1.x - p2.x) % self.q
+        #y = (l * (p1.x - x) - p1.y) % self.q
+        
+        A = p2.x*p2.y
+        B = p1.x*p1.y
+        print "A:",A,"B:",B
+        x = (p1.y**2 * p2.x - p2.y**2 * p1.x) / (A-B)
+        y = (p1.x**2 * p2.y - p2.x**2 * p1.y) / (A-B)
+
+        return Coord(x, y)
+     
+    def Twimul(self, p, n):
+        """n times <mul> of elliptic curve
+        >>> m = ec.mul(p, n)
+        """
+        r = self.zero
+        m2 = p
+        # O(log2(n)) add, fast and efficient
+        while 0 < n:
+            if n & 1 == 1:
+                r = self.Twiadd(r, m2)
+                pass
+            n, m2 = n >> 1, self.Twidouble(m2)
+            pass
+        return r
+ 
+    def Gendouble(self, p):
+        A = p.x**3
+        B = p.y**3
+        C = A-B
+        x = p.y*(1-A)/C
+        y = p.x*(B-1)/C
+        return Coord(x, y)
+
+    def Genadd(self, p1, p2):
+        if p1 == self.zero: return p2
+        if p2 == self.zero: return p1
+        # p1 + -p1 == 0
+        if p1.x == p2.x and (p1.y != p2.y or p1.y == 0): return self.zero
+        if p1.x == p2.x: return self.Gendouble(p1)
+        A = p2.x*p2.y
+        B = p1.x*p1.y
+        print "A:",A,"B:",B
+        x = (p1.y**2 * p2.x - p2.y**2 * p1.x) / (A-B)
+        y = (p1.x**2 * p2.y - p2.x**2 * p1.y) / (A-B)
+
+        return Coord(x, y)
+
+    def mul(self, p, n):
+        r = self.zero
+        m2 = p
+        while 0 < n:
+            if n & 1 == 1:
+                r = self.Genadd(r, m2)
+                pass
+            n, m2 = n >> 1, self.Gendouble(m2)
+            pass
+        return r
+
+    def order(self, g):
+        """order of point g
+        >>> o = ec.order(g)
+        >>> assert ec.is_valid(a) and ec.mul(a, o) == ec.zero
+        >>> assert o <= ec.q
+        """
+        # If order is already known, cut down run-time
+        if self.o != None:
+            return self.o
+        assert self.is_valid(g) and g != self.zero
+        for i in range(1, self.q + 1):
+            if self.mul(g, i) == self.zero:
+                return i
+            pass
+        raise Exception("Invalid order")
+    pass
+
 class ElGamal(object):
     """ElGamal Encryption
     - ec: elliptic curve
@@ -592,11 +784,14 @@ class DSA(object):
         - sig: signature as (int, int)
         - pub: pub key as a point on ec
         """
+        #print "sig",sig
+        #print "self.n",self.n
+        #print "pub",pub
         assert self.ec.is_valid(pub)
         assert self.ec.mul(pub, self.n) == self.ec.zero
         w = inv(sig[1], self.n)
         u1, u2 = hashval * w % self.n, sig[0] * w % self.n
-        p = self.ec.add(self.ec.mul(self.g, u1), self.ec.mul(pub, u2))
+        p = self.ec.Affadd(self.ec.mul(self.g, u1), self.ec.mul(pub, u2))       #SLOW PART, PLEASE CHANGE
         return p.x % self.n == sig[0]
     pass
 
@@ -670,9 +865,9 @@ class Person(object):
         elif len(g)==2:
             self.g = Coord(g[0],g[1])
             assert self.G.is_valid(self.g)
-        elif len(g)==3:
-            self.g = JaCoord(g[0],g[1],g[2])
-            assert self.G.is_valid(self.g)
+        #elif len(g)==3:
+        #    self.g = JaCoord(g[0],g[1],g[2])
+        #    assert self.G.is_valid(self.g)
         else:
             print "Error in Parameters"
 
@@ -716,7 +911,7 @@ class Person(object):
         # Return Cipher (c, d)
 
         # Uncomment to turn on the DSA
-        #assert self.dsa.validate(128, self.sig, self.h), "Invalid Public Key"
+        assert self.dsa.validate(128, self.sig, self.h), "Invalid Public Key"
         m1, blockSize = encrypt(m)#, self.blockLen)
         #self.blockLen = blockSize
         (c, d) = self.gamal.enc(m1, self.g, self.x, self.h)
@@ -732,6 +927,7 @@ class Person(object):
 def toImage(encrypted):
     # This method is still highly inefficient
     # and needs to be severly reworked
+    # The use of for loops within for loops is a bad practice
 
     # Using the import statements for Imaging
     # Create a small representation of the message
@@ -782,6 +978,11 @@ def main():
     #initX = 19277929113566293071110308034699488026831934219452440156649784352033
     #initY = 19926808758034470970197974370888749184205991990603949537637343198772
     #G = EC(-3, b, q, o) # Without order is a longer run-time, maybe impossible
+
+
+    # Hessian in form a*x^3 + y^3 + 1 = 3*d*x*y
+    #G = HesEC(2, -2, 100)#, 1)
+    #init = (1, -1)
 
     p224 = RAW_CURVES.get(35)      # p224 is Curve 35
     G = EC(int(p224[1],16), int(p224[2],16), int(p224[3],16), int(p224[6],16))
@@ -837,5 +1038,4 @@ def main():
 
 ########################################################################
     
-
 main()
