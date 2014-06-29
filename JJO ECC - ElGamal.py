@@ -12,6 +12,7 @@
 
 # TO DO:
 # -----------------------------
+# Fix the read in the main(), figure out converstion of str to Coord and Array
 # DSA is slow because it is implementing affine addition, change to projective
 # Finish Twisted Hessian Coordinates
 # Change Message Compression from Huffman to something useful
@@ -19,6 +20,7 @@
 # Fix the DSA and activate the assertion in the encryptMsg method
 # Point Compression maybe - Involves only sending the X coordinate and a bit instead of X and Y Coordinate
 # Imaginary Hyperelliptic Curves? Why not
+# -----------------------------
 
 # Different coordinate systems are used to speed up the encryption
 # The run-time determining step is in the point addition on the elliptic curve
@@ -162,6 +164,9 @@ import copy
 from time import time
 # start = time()
 # print time()-start
+
+# Get File Size
+import os
 
 # Message Compression
 #from JJO_Compression import Huffman, compress, expand
@@ -965,6 +970,8 @@ def toImage(encrypted):
     img.show()
 
 def main():
+    startTime = time()
+
     # Basic Example of Elliptic Curve:
     # Elliptic Curve = EC(a, b, q, o) st
     # y^2 = x^3 + ax + b mod q and Point P^o=P
@@ -1022,7 +1029,22 @@ def main():
     encrypted1, encrypted2, blockLen = bob.encryptMsg(message)
     encrypted = (encrypted1, encrypted2)
 
-    #print "Length:",len(message),", Message:",message
+    # Write the encryption to a file to be sent
+    f = open('JJO ECC Text WriteTo.txt','w')
+    f.write(str(encrypted))
+    f.close()
+
+    ####################################################################
+
+    # Read the file and prepare for processing - TODO - fix the read, the parenthesis are in the way
+    f = open('JJO ECC Text WriteTo.txt','r')
+    encryptedReadMsg = f.read()
+    f.close()
+
+    # encryptedReadMsg as String to Coord and Array
+
+
+
     print "B, C, D:",blockLen, encrypted
     #toImage(encrypted)
 
@@ -1035,7 +1057,11 @@ def main():
 
     #print "Length:",len(decrypted),", Message:",decrypted
     print "Length:",len(decrypted)
+    #print "Message:",decrypted
 
+
+    print "Total Time:",time()-startTime
+    print "Original File Size:",os.path.getsize('JJO ECC Text.txt'),"Bytes Encrypted file Size:",os.path.getsize('JJO ECC Text WriteTo.txt'),"Bytes"
 ########################################################################
     
 main()
