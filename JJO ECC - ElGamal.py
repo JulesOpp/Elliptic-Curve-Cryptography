@@ -12,7 +12,6 @@
 
 # TO DO:
 # -----------------------------
-# Fix the read in the main(), figure out converstion of str to Coord and Array
 # DSA is slow because it is implementing affine addition, change to projective
 # Finish Twisted Hessian Coordinates
 # Change Message Compression from Huffman to something useful
@@ -20,6 +19,12 @@
 # Fix the DSA and activate the assertion in the encryptMsg method
 # Point Compression maybe - Involves only sending the X coordinate and a bit instead of X and Y Coordinate
 # Imaginary Hyperelliptic Curves? Why not
+# -----------------------------
+
+# Edit List
+# -----------------------------
+# Added error handling depending on the length of the message
+# Checked run-time relation with length of message, I think its around log time, def less than n-time
 # -----------------------------
 
 # Different coordinate systems are used to speed up the encryption
@@ -844,7 +849,12 @@ def blocks2numList(blocks, n):
 
 def encrypt(message):#, blockSize):
     # Convert a String Message into an Array of Integers
-    blockSize = int(len(message)/200) #Split into n+1 blocks
+    if len(message) > 200:
+        blockSize = int(len(message)/200) #Split into n+1 blocks
+    elif len(message) > 4:
+        blockSize = int(len(message)/5) #On error, message too small, divide by 5
+    else:
+        blockSize = int(len(message))
     numList = string2numList(message)
     numBlocks = numList2blocks(numList, blockSize)
     return numBlocks, blockSize
@@ -969,6 +979,34 @@ def toImage(encrypted):
     img = smp.toimage([tot[n] for n in range(len(tot))])
     img.show()
 
+def readTextToUse(encryptedReadMsg):
+    # encryptedReadMsg as String to Coord and Array
+    encArrMsg = []
+    comma1 = 0
+    comma2 = 0
+    for i in range(len(encryptedReadMsg)):
+        if encryptedReadMsg[i] == ',':
+            if comma1 == 0:
+                comma1 = i
+            else:
+                comma2 = i
+                break
+
+    coord_x = int(encryptedReadMsg[9:comma1-1])
+    coord_y = int(encryptedReadMsg[comma1+4:comma2-2])
+
+    array_1 = encryptedReadMsg[comma2+3:len(encryptedReadMsg)-2]
+    array_1 = array_1.split(",")
+
+    for i in range(len(array_1)):
+        array_1[i] = array_1[i][:len(array_1[i])-1]
+        array_1[i] = int(array_1[i])
+
+    coord_xy = Coord(coord_x, coord_y)
+    encrypted = (coord_xy, array_1)
+
+    return encrypted
+
 def main():
     startTime = time()
 
@@ -1040,10 +1078,7 @@ def main():
     f = open('JJO ECC Text WriteTo.txt','r')
     encryptedReadMsg = f.read()
     f.close()
-
-    # encryptedReadMsg as String to Coord and Array
-
-
+    encrypted = readTextToUse(encryptedReadMsg)
 
     print "B, C, D:",blockLen, encrypted
     #toImage(encrypted)
