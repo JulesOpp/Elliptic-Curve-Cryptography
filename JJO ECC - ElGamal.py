@@ -155,10 +155,10 @@ Alice:
 ########################################################################
 
 # Encryption
-import collections
-import random
+import collections              # For Coord sets
+import random                   # Create private keys
 from random import randint
-import copy
+import copy                     # Words to num conversion
 
 # Imaging - See toImage method for details
 #import numpy as np
@@ -166,9 +166,8 @@ import copy
 #import skimage #not needed
 
 # Timing
-from time import time
-# start = time()
-# print time()-start
+from time import time           # Time the run
+# Time the run with: Begin: start = time(), End: print time()-start
 
 # Get File Size
 import os
@@ -183,10 +182,10 @@ def extendedEuclid(a, b):
     the GCD of a and b, and x = y * a + z * b'''
     prevx, x = 1, 0 #; prevy, y = 0, 1
     while b:
-        q = a/b
-        x, prevx = prevx - q*x, x
+        q = a / b
+        x, prevx = prevx - q * x, x
         #y, prevy = prevy - q*y, y
-        a, b = b, a%b
+        a, b = b, a % b
     return a, prevx   #, prevy
 
 def inv(n, q):
@@ -194,8 +193,8 @@ def inv(n, q):
     g, x = extendedEuclid(n, q)
     if g != 1:
        raise ZeroDivisionError, (n, q)
-    assert g==1, "a must be coprime to n."
-    return x%q
+    assert g == 1, "a must be coprime to n."
+    return x % q
  
 def legendre_symbol(a, p):
     # Code derived from http://samuelkerr.com/?p=431
@@ -210,13 +209,13 @@ def modular_sqrt(a, p):
     elif p == 2: return p
     elif p%4 == 3: return pow(a, (p+1) / 4, p)
 
-    s = p-1 ; e = 0
+    s = p - 1 ; e = 0
     while s % 2 == 0: s /= 2 ; e += 1
 
     n = 2
     while legendre_symbol(n, p) != -1: n += 1
 
-    x = pow(a, (s+1) /2, p)
+    x = pow(a, (s + 1) /2, p)
     b = pow(a,s,p)
     g = pow(n,s,p)
     r = e
@@ -228,7 +227,7 @@ def modular_sqrt(a, p):
             if t == 1: break
             t = pow(t, 2, p)
         if m == 0: return x
-        gs = pow(g, 2 ** (r-m-1), p)
+        gs = pow(g, 2 ** (r - m - 1), p)
         g = (gs * gs) % p
         x = (x * gs) % p
         b = (b * g) % p
@@ -334,8 +333,8 @@ class EC(object):
         self.q = q
         # just as unique ZERO value representation for "add": (not on curve)
         self.zero = Coord(0, 0)
-        self.JaZero = JaCoord(0,0,0)
-        self.ProZero = ProCoord(0,0,0)
+        self.JaZero = JaCoord(0, 0, 0)
+        self.ProZero = ProCoord(0, 0, 0)
 
         self.o = o
         pass
@@ -362,8 +361,7 @@ class EC(object):
         return Coord(x, y), Coord(x, -y)
  
     def Affadd(self, p1, p2):
-        """<add> of elliptic curve: negate of 3rd cross point of (p1,p2) line
-        """
+        """<add> of elliptic curve: negate of 3rd cross point of (p1,p2) line"""
         if p1 == self.zero: return p2
         if p2 == self.zero: return p1
         # p1 + -p1 == 0
@@ -381,7 +379,7 @@ class EC(object):
      
     def Affmul(self, p, n):
         """n times <mul> of elliptic curve
-        >>> m = ec.mul(p, n)
+        >>> m = ec.Affmul(p, n)
         """
         r = self.zero
         m2 = p
@@ -396,16 +394,16 @@ class EC(object):
  
     def ProDouble(self, p):
         if p.y == 0: return self.ProZero
-        w = self.a*p.z**2+3*p.x**2
-        s = p.y*p.z
-        ss = s**2
-        sss = s*ss
-        R = p.y*s
-        B = p.x*R
-        h = w**2-8*B
-        X = 2*h*s
-        Y = w*(4*B-h)-8*R**2
-        Z = 8*sss
+        w = self.a * p.z ** 2 + 3 * p.x ** 2
+        s = p.y * p.z
+        ss = s ** 2
+        sss = s * ss
+        R = p.y * s
+        B = p.x * R
+        h = w ** 2 - 8 * B
+        X = 2 * h * s
+        Y = w * (4 * B - h) - 8 * R ** 2
+        Z = 8 * sss
         return ProCoord(X % self.q,Y % self.q,Z % self.q)
 
     def ProAdd(self, p1, p2):
@@ -414,20 +412,20 @@ class EC(object):
         if p1.x == p2.x and (p1.y != p2.y or p1.y == 0): return self.ProZero
         if p1.x == p2.x: return self.ProDouble(p1)
         else:
-            Y1Z2 = p1.y*p2.z
-            X1Z2 = p1.x*p2.z
-            Z1Z2 = p1.z*p2.z
-            u = p2.y*p1.z-Y1Z2
-            uu = u**2
-            v = p2.x*p1.z-X1Z2
-            vv = v**2
-            vvv = v*vv
-            R = vv*X1Z2
-            A = uu*Z1Z2-vvv-2*R
-            X = v*A
-            Y = u*(R-A)-vvv*Y1Z2
-            Z = vvv*Z1Z2
-        return ProCoord(X%self.q, Y%self.q, Z%self.q)
+            Y1Z2 = p1.y * p2.z
+            X1Z2 = p1.x * p2.z
+            Z1Z2 = p1.z * p2.z
+            u = p2.y * p1.z - Y1Z2
+            uu = u ** 2
+            v = p2.x * p1.z - X1Z2
+            vv = v ** 2
+            vvv = v * vv
+            R = vv * X1Z2
+            A = uu * Z1Z2 - vvv - 2 * R
+            X = v * A
+            Y = u * (R - A) - vvv * Y1Z2
+            Z = vvv * Z1Z2
+        return ProCoord(X % self.q, Y % self.q, Z % self.q)
 
     def mul(self, p, n):
         # Map (x,y) to (X,Y,Z) where x=X/Z and y=Y/Z
